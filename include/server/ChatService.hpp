@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <mutex>
 #include "offlinemessagemodel.hpp"
+#include "friendmodel.hpp"
 using namespace std;
 using namespace muduo;
 using namespace muduo::net;
@@ -31,6 +32,8 @@ public:
     void reg(const TcpConnectionPtr& conn, json& js, Timestamp time);
     //一对一聊天
     void oneChat(const TcpConnectionPtr& conn, json& js, Timestamp time);
+    //添加好友业务
+    void addFriend(const TcpConnectionPtr& conn, json& js, Timestamp time);
     //获取消息对应的处理器
     MsgHandler getHandler(int msgid);
     //处理客户端异常退出
@@ -51,6 +54,8 @@ private:
     UserModel _userModel;
     // 离线消息操作类
     OfflineMsgModel _offlineMsgModel;
+    // 好友操作类
+    FriendModel _friendModel;
 };
 
 #endif

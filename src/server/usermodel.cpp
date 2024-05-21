@@ -48,7 +48,6 @@ User UserModel::query(int& id)
             }
         }
     }
-
     return User();
 }
 

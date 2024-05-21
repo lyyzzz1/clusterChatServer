@@ -2,15 +2,17 @@
 
 #include <muduo/base/Logging.h>
 
-#include <functional>
-#include <mutex>
-#include <utility>
-#include <vector>
 #include "public.hpp"
 #include "user.hpp"
 #include "usermodel.hpp"
+#include <functional>
+#include <map>
+#include <mutex>
+#include <utility>
+#include <vector>
 
 using namespace muduo;
+using namespace std::placeholders;
 
 //获取单例对象的接口函数
 ChatService* ChatService::instance()
@@ -22,15 +24,14 @@ ChatService* ChatService::instance()
 // 注册消息以及对应的回调Handler回调函数
 ChatService::ChatService()
 {
-    _msgHandlerMap.insert(make_pair(
-        LOGIN_MSG, std::bind(&ChatService::login, this, placeholders::_1,
-                             placeholders::_2, placeholders::_3)));
     _msgHandlerMap.insert(
-        make_pair(REG_MSG, std::bind(&ChatService::reg, this, placeholders::_1,
-                                     placeholders::_2, placeholders::_3)));
+        make_pair(LOGIN_MSG, std::bind(&ChatService::login, this, _1, _2, _3)));
+    _msgHandlerMap.insert(
+        make_pair(REG_MSG, std::bind(&ChatService::reg, this, _1, _2, _3)));
     _msgHandlerMap.insert(make_pair(
-        ONE_CHAT_MSG, std::bind(&ChatService::oneChat, this, placeholders::_1,
-                                placeholders::_2, placeholders::_3)));
+        ONE_CHAT_MSG, std::bind(&ChatService::oneChat, this, _1, _2, _3)));
+    _msgHandlerMap.insert(make_pair(
+        ADD_FRIEND_MSG, std::bind(&ChatService::addFriend, this, _1, _2, _3)));
 }
 
 MsgHandler ChatService::getHandler(int msgid)
@@ -77,11 +78,23 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             response["name"] = user.getName();
             // 查询用户是否有离线消息，如果有就转发给用户
             vector<string> vec = _offlineMsgModel.query(id);
-            if(!vec.empty())
-            {
+            if (!vec.empty()) {
                 response["offlinemsg"] = vec;
                 // 读取该用户的离线消息后，把该用户的所有离线消息删除
                 _offlineMsgModel.remove(id);
+            }
+            // 查询该用户的好友信息并返回
+            vector<User> userVec = _friendModel.query(id);
+            if (!userVec.empty()) {
+                vector<string> vec2;
+                for(User& user:userVec){
+                    json js;
+                    js["id"] = user.getId();
+                    js["name"] = user.getName();
+                    js["state"] = user.getState();
+                    vec2.push_back(js.dump());
+                }
+                response["friends"] = vec2;
             }
             conn->send(response.dump());
         }
@@ -94,6 +107,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
         conn->send(response.dump());
     }
 }
+
 //处理注册业务
 void ChatService::reg(const TcpConnectionPtr& conn, json& js, Timestamp time)
 {
@@ -116,6 +130,16 @@ void ChatService::reg(const TcpConnectionPtr& conn, json& js, Timestamp time)
         response["errmsg"] = "sigh up failded";
         conn->send(response.dump());
     }
+}
+
+//添加好友业务
+void ChatService::addFriend(const TcpConnectionPtr& conn, json& js,
+                            Timestamp time)
+{
+    // js msgid:6 id: friendid:
+    int userid = js["id"].get<int>();
+    int friendid = js["friendid"].get<int>();
+    _friendModel.insert(userid, friendid);
 }
 
 //处理客户端异常退出
