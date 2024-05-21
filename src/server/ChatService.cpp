@@ -3,6 +3,7 @@
 #include <muduo/base/Logging.h>
 
 #include <functional>
+#include <mutex>
 #include <utility>
 
 #include "public.hpp"
@@ -57,16 +58,22 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             response["errno"] = 2;
             response["errmsg"] = "该账号已经登录，请重新输入新账号";
             conn->send(response.dump());
+        } else {
+            {
+                lock_guard<mutex> lk(_connMutex);
+                // 登录成功，记录住用户的tcp连接，以便之后发送消息
+                _userConnMap.insert(make_pair(id, conn));
+            }
+            // 登录成功，更新用户状态信息 state offline->online
+            user.setState("online");
+            _userModel.updateState(user);
+            json response;
+            response["msgid"] = LOGIN_MSG_ACK;
+            response["errno"] = 0;
+            response["id"] = user.getId();
+            response["name"] = user.getName();
+            conn->send(response.dump());
         }
-        // 登录成功，更新用户状态信息 state offline->online
-        user.setState("online");
-        _userModel.updateState(user);
-        json response;
-        response["msgid"] = LOGIN_MSG_ACK;
-        response["errno"] = 0;
-        response["id"] = user.getId();
-        response["name"] = user.getName();
-        conn->send(response.dump());
     } else {
         // 登陆失败
         json response;
