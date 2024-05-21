@@ -10,6 +10,7 @@
 #include <muduo/net/TcpConnection.h>
 #include <unordered_map>
 #include <mutex>
+#include "offlinemessagemodel.hpp"
 using namespace std;
 using namespace muduo;
 using namespace muduo::net;
@@ -34,6 +35,8 @@ public:
     MsgHandler getHandler(int msgid);
     //处理客户端异常退出
     void clientCloseException(const TcpConnectionPtr& conn);
+    //处理服务器异常退出
+    void reset();
 private:
     ChatService();
     //存储消息id和其对应的业务处理方法
@@ -46,6 +49,8 @@ private:
     mutex _connMutex;
     // 数据操作类对象
     UserModel _userModel;
+    // 离线消息操作类
+    OfflineMsgModel _offlineMsgModel;
 };
 
 #endif
