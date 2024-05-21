@@ -1,6 +1,6 @@
 /.cache
 /build
+/bin
 compile_commands.json
 test.json
 /test
-/bin
