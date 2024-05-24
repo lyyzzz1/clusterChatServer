@@ -12,6 +12,9 @@ enum EnMsgType {
     REG_MSG_ACK,    //注册相应消息 4
     ONE_CHAT_MSG,   //聊天消息 5
     ADD_FRIEND_MSG, //添加好友消息 6
+    CREATE_GROUP_MSG, //创建群组 7
+    ADD_GROUP_MSG,   //加入群组 8
+    GROUP_CHAT_MSG,  //群聊天 9
 };
 
 #endif

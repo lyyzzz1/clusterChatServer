@@ -2,6 +2,7 @@
 
 #include <muduo/base/Logging.h>
 
+#include "group.hpp"
 #include "public.hpp"
 #include "user.hpp"
 #include "usermodel.hpp"
@@ -32,6 +33,13 @@ ChatService::ChatService()
         ONE_CHAT_MSG, std::bind(&ChatService::oneChat, this, _1, _2, _3)));
     _msgHandlerMap.insert(make_pair(
         ADD_FRIEND_MSG, std::bind(&ChatService::addFriend, this, _1, _2, _3)));
+    _msgHandlerMap.insert(
+        make_pair(CREATE_GROUP_MSG,
+                  std::bind(&ChatService::createGroup, this, _1, _2, _3)));
+    _msgHandlerMap.insert(make_pair(
+        ADD_GROUP_MSG, std::bind(&ChatService::addGroup, this, _1, _2, _3)));
+    _msgHandlerMap.insert(make_pair(
+        GROUP_CHAT_MSG, std::bind(&ChatService::groupChat, this, _1, _2, _3)));
 }
 
 MsgHandler ChatService::getHandler(int msgid)
@@ -87,7 +95,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             vector<User> userVec = _friendModel.query(id);
             if (!userVec.empty()) {
                 vector<string> vec2;
-                for(User& user:userVec){
+                for (User& user : userVec) {
                     json js;
                     js["id"] = user.getId();
                     js["name"] = user.getName();
@@ -140,6 +148,51 @@ void ChatService::addFriend(const TcpConnectionPtr& conn, json& js,
     int userid = js["id"].get<int>();
     int friendid = js["friendid"].get<int>();
     _friendModel.insert(userid, friendid);
+}
+
+//创建群组
+void ChatService::createGroup(const TcpConnectionPtr& conn, json& js,
+                              Timestamp time)
+{
+    // msgid:7 id:1 groupname:a groupdesc:no
+    int userid = js["id"].get<int>();
+    string name = js["groupname"];
+    string desc = js["groupdesc"];
+
+    Group group(-1, name, desc);
+    if (_groupModel.createGroup(group)) {
+        //创建成功，将用户设置为管理员
+        _groupModel.addGroup(userid, group.getId(), "creator");
+    }
+}
+
+void ChatService::addGroup(const TcpConnectionPtr& conn, json& js,
+                           Timestamp time)
+{
+    int userid = js["id"];
+    int groupid = js["groupid"];
+    _groupModel.addGroup(userid, groupid, "normal");
+}
+
+void ChatService::groupChat(const TcpConnectionPtr& conn, json& js,
+                            Timestamp time)
+{
+    // id:1 groupid:2
+    int userid = js["id"];
+    int groupid = js["groupid"];
+
+    vector<int> useridVec = _groupModel.queryGroupUsers(userid, groupid);
+    lock_guard<mutex> lock(_connMutex);
+    for (int id : useridVec) {
+        auto it = _userConnMap.find(id);
+        if (it != _userConnMap.end()) {
+            // 在线，直接转发
+            it->second->send(js.dump());
+        } else {
+            // 不在线，存入离线列表
+            _offlineMsgModel.insert(id, js.dump());
+        }
+    }
 }
 
 //处理客户端异常退出
