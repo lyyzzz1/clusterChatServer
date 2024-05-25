@@ -74,7 +74,7 @@ vector<Group> GroupModel::queryGroups(int userid)
                 groupuser.setId(atoi(row[0]));
                 groupuser.setName(row[1]);
                 groupuser.setState(row[2]);
-                groupuser.serRole(row[3]);
+                groupuser.setRole(row[3]);
                 group.getUsers().push_back(groupuser);
             }
             mysql_free_result(res);

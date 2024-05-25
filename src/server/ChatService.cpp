@@ -57,6 +57,20 @@ MsgHandler ChatService::getHandler(int msgid)
     }
 }
 
+/*
+{
+    "msgid": LOGIN_MSG_ACK,
+    "errno": 0,
+    "id": 用户ID,
+    "name": 用户名,
+    "offlinemsg": [离线消息列表],  // 如果有离线消息
+    "friends": [好友信息列表]  // 如果有好友信息
+}
+
+
+
+*/
+
 // 处理登录业务
 void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
 {
@@ -105,6 +119,14 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
                 response["friends"] = vec2;
             }
             conn->send(response.dump());
+
+            // 如果有群组，则发送群组的的消息
+            vector<Group> groupVec = _groupModel.queryGroups(id);
+            if (!groupVec.empty()) {
+                // 非空的情况下发送到客户端
+                json groupRespons;
+                vector<string> userV;
+            }
         }
     } else {
         // 登陆失败
