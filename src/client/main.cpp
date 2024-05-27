@@ -1,5 +1,6 @@
 #include "ChatService.hpp"
 #include "group.hpp"
+#include "groupuser.hpp"
 #include "public.hpp"
 #include "user.hpp"
 #include <arpa/inet.h>
@@ -92,12 +93,12 @@ int main(int argc, char** argv)
                 js["id"] = id;
                 js["password"] = pwd;
                 string request = js.dump();
-
-                int len = send(clientfd, &js, strlen(request.c_str()) + 1, 0);
+                int len = send(clientfd, request.c_str(),
+                               strlen(request.c_str()) + 1, 0);
                 if (len == -1) {
                     cerr << "send login msg error" << endl;
                 } else {
-                    char buffer[1024];
+                    char buffer[1024] = {0};
                     len = recv(clientfd, buffer, 1024, 0);
                     if (len == -1) {
                         cerr << "recv login msg error" << endl;
@@ -144,14 +145,15 @@ int main(int argc, char** argv)
                                         user.setState(userinfo["state"]);
                                         group.getUsers().push_back(user);
                                     }
-                                    
+
                                     g_currentUserGroupList.push_back(group);
                                 }
                             }
+                            showCurrentUserData();
                         }
                     }
                 }
-            }
+            } break;
             case 2: { // register业务
                 char name[50] = {0};
                 char password[50] = {0};
@@ -181,10 +183,10 @@ int main(int argc, char** argv)
                     } else {
                         json responsejs = json::parse(buffer);
                         if (responsejs["errno"].get<int>() != 0) { // 注册失败
-                            cerr << name << "is already exist, register error!"
+                            cerr << name << " is already exist, register error!"
                                  << endl;
                         } else { // 注册成功
-                            cout << name << "register success ,userid is:"
+                            cout << name << " register success ,userid is:"
                                  << responsejs["id"] << ", don't forget it!"
                                  << endl;
                         }
@@ -197,6 +199,32 @@ int main(int argc, char** argv)
             default:
                 cerr << "invalid input!" << endl;
                 break;
+        }
+    }
+}
+
+void showCurrentUserData()
+{
+    cout << "=====================login user=====================" << endl;
+    cout << "current login user => id:" << g_currentUser.getId()
+         << " name:" << g_currentUser.getName() << endl;
+    cout << "--------------------FriendList--------------------" << endl;
+    if (!g_currentUserFriendList.empty()) {
+        //好友列表不为空，则输出
+        for (User& user : g_currentUserFriendList) {
+            cout << user.getId() << " " << user.getName() << " "
+                 << user.getState() << endl;
+        }
+    }
+    cout << "--------------------GroupList--------------------" << endl;
+    if (!g_currentUserGroupList.empty()) {
+        for (Group& group : g_currentUserGroupList) {
+            cout << group.getId() << " " << group.getName() << " "
+                 << group.getDesc() << endl;
+            for (GroupUser& user : group.getUsers()) {
+                cout << user.getId() << " " << user.getName() << " "
+                     << user.getState() << " " << user.getRole() << endl;
+            }
         }
     }
 }

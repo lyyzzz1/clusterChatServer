@@ -7,13 +7,16 @@
 #include "user.hpp"
 #include "usermodel.hpp"
 #include <functional>
+#include <iostream>
 #include <map>
 #include <mutex>
+#include <string>
 #include <utility>
 #include <vector>
 
 using namespace muduo;
 using namespace std::placeholders;
+using namespace std;
 
 //获取单例对象的接口函数
 ChatService* ChatService::instance()
@@ -57,20 +60,6 @@ MsgHandler ChatService::getHandler(int msgid)
     }
 }
 
-/*
-{
-    "msgid": LOGIN_MSG_ACK,
-    "errno": 0,
-    "id": 用户ID,
-    "name": 用户名,
-    "offlinemsg": [离线消息列表],  // 如果有离线消息
-    "friends": [好友信息列表]  // 如果有好友信息
-}
-
-
-
-*/
-
 // 处理登录业务
 void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
 {
@@ -82,7 +71,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             json response;
             response["msgid"] = LOGIN_MSG_ACK;
             response["errno"] = 2;
-            response["errmsg"] = "该账号已经登录，请重新输入新账号";
+            response["errmsg"] = "This account is already logged in, please re-enter a new one";
             conn->send(response.dump());
         } else {
             {
@@ -118,22 +107,41 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
                 }
                 response["friends"] = vec2;
             }
-            conn->send(response.dump());
 
             // 如果有群组，则发送群组的的消息
             vector<Group> groupVec = _groupModel.queryGroups(id);
             if (!groupVec.empty()) {
                 // 非空的情况下发送到客户端
-                json groupRespons;
-                vector<string> userV;
+                // group:[{groupid:[xxx,xxx,xxx]}]
+                vector<string> groupV;
+                for (Group& group : groupVec) {
+                    json groupjson;
+                    groupjson["id"] = group.getId();
+                    groupjson["groupname"] = group.getName();
+                    groupjson["groupdesc"] = group.getDesc();
+
+                    vector<string> userV;
+                    for(GroupUser& user:group.getUsers()){
+                        json js;
+                        js["id"] = user.getId();
+                        js["name"] = user.getName();
+                        js["state"] = user.getState();
+                        js["role"] = user.getRole();
+                        userV.push_back(js.dump());
+                    }
+                    groupjson["users"] = userV;
+                    groupV.push_back(groupjson);
+                }
+                response["groups"] = groupV;
             }
+            conn->send(response.dump());
         }
     } else {
         // 登陆失败
         json response;
         response["msgid"] = LOGIN_MSG_ACK;
         response["errno"] = 1;
-        response["errmsg"] = "用户名或者密码错误";
+        response["errmsg"] = "Wrong username or password";
         conn->send(response.dump());
     }
 }
