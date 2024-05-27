@@ -24,6 +24,7 @@ bool Redis::connect()
     _publish_context = redisConnect("127.0.0.1", 6379);
     if (_publish_context == nullptr) {
         cerr << "connect redis failed!" << endl;
+        return false;
     }
     // 负责订阅的上下文连接
     _subcribe_context = redisConnect("127.0.0.1", 6379);
@@ -33,9 +34,7 @@ bool Redis::connect()
     }
 
     // 在单独的线程中监听通道上的事件，有消息给业务层进行上报
-    thread t([&]() {
-        observer_channel_message();
-    });
+    thread t([&]() { observer_channel_message(); });
     t.detach();
 
     cout << "connect redis success!" << endl;
@@ -51,15 +50,14 @@ bool Redis::publish(int channel, string message)
         return false;
     }
     freeReplyObject(reply);
-    cout << "redis publish success!" << channel << " said:" << message << endl;
     return true;
 }
 
 bool Redis::subscribe(int channel)
 {
     // 把命令组装好
-    if (redisAppendCommand(this->_subcribe_context, "SUBSCRIBE %d",
-                           channel) == REDIS_ERR) {
+    if (redisAppendCommand(this->_subcribe_context, "SUBSCRIBE %d", channel) ==
+        REDIS_ERR) {
         cerr << "subscribe command failed!" << endl;
         return false;
     }
@@ -73,7 +71,6 @@ bool Redis::subscribe(int channel)
         }
     }
     // redisGetReply
-    cout << "redis subscribe userid:" << channel << "success!" << endl;
     return true;
 }
 
@@ -95,16 +92,13 @@ bool Redis::unsubscribe(int channel)
         }
     }
     // redisGetReply
-    cout << "redis unsubscribe userid:" << channel << "success!" << endl;
     return true;
 }
 
 void Redis::observer_channel_message()
 {
     redisReply* reply = nullptr;
-    while (redisGetReply(this->_subcribe_context, (void**)&reply)) {
-        cout << "accept subscibe channel:" << reply->element[1]->str
-             << "said:" << reply->element[2]->str << endl;
+    while (redisGetReply(this->_subcribe_context, (void**)&reply) == REDIS_OK) {
         // 订阅收到的消息是一个带三元素的数组
         if (reply != nullptr && reply->element[2] != nullptr &&
             reply->element[2]->str != nullptr) {
