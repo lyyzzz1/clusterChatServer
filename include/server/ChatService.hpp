@@ -41,6 +41,8 @@ public:
     void addGroup(const TcpConnectionPtr& conn, json& js, Timestamp time);
     //群聊消息
     void groupChat(const TcpConnectionPtr& conn, json& js, Timestamp time);
+    //处理用户正常退出
+    void loginout(const TcpConnectionPtr& conn, json& js, Timestamp time);
     //获取消息对应的处理器
     MsgHandler getHandler(int msgid);
     //处理客户端异常退出

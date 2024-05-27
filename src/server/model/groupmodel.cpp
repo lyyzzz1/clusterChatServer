@@ -27,7 +27,7 @@ bool GroupModel::createGroup(Group& group)
 void GroupModel::addGroup(int userid, int groupid, string role)
 {
     char sql[1024] = {0};
-    sprintf(sql, "insert into groupuser values (%d, %d,'%s')", userid, groupid,
+    sprintf(sql, "insert into groupuser values (%d, %d,'%s')", groupid, userid,
             role.c_str());
 
     MySQL mysql;
@@ -40,7 +40,7 @@ vector<Group> GroupModel::queryGroups(int userid)
 {
     char sql[1024] = {0};
     sprintf(sql,
-            "SELECT a.id a.groupname a.groupdesc FROM allgroup a JOIN "
+            "SELECT a.id,a.groupname,a.groupdesc FROM allgroup a JOIN "
             "groupuser b ON b.groupid = a.id WHERE b.userid = %d ",
             userid);
 
@@ -91,13 +91,15 @@ vector<int> GroupModel::queryGroupUsers(int userid, int groupid)
             groupid, userid);
     MySQL mysql;
     vector<int> usersId;
-    MYSQL_RES* res = mysql.query(sql);
-    if (res != nullptr) {
-        MYSQL_ROW row;
-        while ((row = mysql_fetch_row(res)) != nullptr) {
-            usersId.push_back(atoi(row[0]));
+    if (mysql.connect()) {
+        MYSQL_RES* res = mysql.query(sql);
+        if (res != nullptr) {
+            MYSQL_ROW row;
+            while ((row = mysql_fetch_row(res)) != nullptr) {
+                usersId.push_back(atoi(row[0]));
+            }
+            mysql_free_result(res);
         }
-        mysql_free_result(res);
     }
     return usersId;
 }

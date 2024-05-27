@@ -3,6 +3,7 @@
 #include <string>
 #include "json.hpp"
 #include "ChatService.hpp"
+#include <iostream>
 using namespace std;
 using json = nlohmann::json;
 
@@ -32,6 +33,7 @@ void ChatServer::onConnection(const TcpConnectionPtr& conn) {
 // 注册读写事件相关信息的回调函数
 void ChatServer::onMessage(const TcpConnectionPtr& conn, Buffer* buffer, Timestamp time) {
     string buf = buffer->retrieveAllAsString();
+    std::cout << buf << std::endl;
     // 数据的反序列化
     json js = json::parse(buf);
     // 解耦网络模块的代码和业务模块的代码

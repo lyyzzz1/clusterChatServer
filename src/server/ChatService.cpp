@@ -1,5 +1,6 @@
 #include "ChatService.hpp"
 
+#include <cstdio>
 #include <muduo/base/Logging.h>
 
 #include "group.hpp"
@@ -43,6 +44,8 @@ ChatService::ChatService()
         ADD_GROUP_MSG, std::bind(&ChatService::addGroup, this, _1, _2, _3)));
     _msgHandlerMap.insert(make_pair(
         GROUP_CHAT_MSG, std::bind(&ChatService::groupChat, this, _1, _2, _3)));
+    _msgHandlerMap.insert(make_pair(
+        LOGIN_OUT_MSG, std::bind(&ChatService::loginout, this, _1, _2, _3)));
 }
 
 MsgHandler ChatService::getHandler(int msgid)
@@ -71,7 +74,8 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
             json response;
             response["msgid"] = LOGIN_MSG_ACK;
             response["errno"] = 2;
-            response["errmsg"] = "This account is already logged in, please re-enter a new one";
+            response["errmsg"] =
+                "This account is already logged in, please re-enter a new one";
             conn->send(response.dump());
         } else {
             {
@@ -121,7 +125,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
                     groupjson["groupdesc"] = group.getDesc();
 
                     vector<string> userV;
-                    for(GroupUser& user:group.getUsers()){
+                    for (GroupUser& user : group.getUsers()) {
                         json js;
                         js["id"] = user.getId();
                         js["name"] = user.getName();
@@ -130,7 +134,7 @@ void ChatService::login(const TcpConnectionPtr& conn, json& js, Timestamp time)
                         userV.push_back(js.dump());
                     }
                     groupjson["users"] = userV;
-                    groupV.push_back(groupjson);
+                    groupV.push_back(groupjson.dump());
                 }
                 response["groups"] = groupV;
             }
@@ -193,6 +197,19 @@ void ChatService::createGroup(const TcpConnectionPtr& conn, json& js,
     if (_groupModel.createGroup(group)) {
         //创建成功，将用户设置为管理员
         _groupModel.addGroup(userid, group.getId(), "creator");
+        json js;
+        js["msgid"] = CREATE_GROUP_ACK;
+        char buffer[1024];
+        sprintf(buffer, "create group success! your groupid is:%d",
+                group.getId());
+        js["msg"] = buffer;
+        conn->send(js.dump());
+    } else {
+        json js;
+        js["msgid"] = CREATE_GROUP_ACK;
+        string msg = "create group faild!";
+        js["msg"] = msg;
+        conn->send(js.dump());
     }
 }
 
@@ -225,6 +242,20 @@ void ChatService::groupChat(const TcpConnectionPtr& conn, json& js,
     }
 }
 
+void ChatService::loginout(const TcpConnectionPtr& conn, json& js, Timestamp time) 
+{
+    int userid = js["id"];
+    {
+        lock_guard<mutex> lock(_connMutex);
+        auto it = _userConnMap.find(userid);
+        if (it!=_userConnMap.end()) {
+            _userConnMap.erase(userid);
+        }
+    }
+    User user(userid);
+    _userModel.updateState(user);
+}
+
 //处理客户端异常退出
 void ChatService::clientCloseException(const TcpConnectionPtr& conn)
 {
@@ -248,7 +279,7 @@ void ChatService::clientCloseException(const TcpConnectionPtr& conn)
 void ChatService::oneChat(const TcpConnectionPtr& conn, json& js,
                           Timestamp time)
 {
-    int toid = js["to"].get<int>();
+    int toid = js["toid"].get<int>();
     {
         lock_guard<mutex> lock(_connMutex);
         auto it = _userConnMap.find(toid);
