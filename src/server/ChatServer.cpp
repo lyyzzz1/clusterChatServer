@@ -16,7 +16,7 @@ ChatServer::ChatServer(EventLoop* loop, const InetAddress& listenAddr,
     _server.setMessageCallback(std::bind(&ChatServer::onMessage, this,
                                          placeholders::_1, placeholders::_2,
                                          placeholders::_3));
-    _server.setThreadNum(2);
+    _server.setThreadNum(4);
 }
 
 void ChatServer::start() { _server.start(); }
