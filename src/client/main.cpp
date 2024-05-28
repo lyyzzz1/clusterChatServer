@@ -4,6 +4,7 @@
 #include "public.hpp"
 #include "user.hpp"
 #include <arpa/inet.h>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -14,6 +15,7 @@
 #include <iostream>
 #include <netinet/in.h>
 #include <ostream>
+#include <semaphore.h>
 #include <string>
 #include <sys/socket.h>
 #include <thread>
@@ -39,7 +41,13 @@ string getCurrentTime();
 // 主聊天页面程序
 void mainMenu(int clientfd);
 // 控制聊天页面程序
-bool isMainMenuRunning = false;
+bool isMainMenuRunning{false};
+
+// 用于读写线程之间的通信
+sem_t rwsem;
+
+// 记录登录状态
+atomic_bool g_isLoginSuccess = false;
 
 int main(int argc, char** argv)
 {
@@ -74,6 +82,12 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
+    // 初始化需要读写用的信号量
+    sem_init(&rwsem, 0, 0);
+    // 连接服务器成功，启动接收子线程
+    std::thread readTask(readTaskHandler, clientfd);
+    readTask.detach();
+
     while (true) {
         // 显示首页面的菜单 登录 注册 退出
         cout << "======================" << endl;
@@ -107,92 +121,11 @@ int main(int argc, char** argv)
                 if (len == -1) {
                     cerr << "send login msg error" << endl;
                 } else {
-                    char buffer[1024] = {0};
-                    len = recv(clientfd, buffer, 1024, 0);
-                    if (len == -1) {
-                        cerr << "recv login msg error" << endl;
-                    } else {
-                        //接收成功
-                        json responsJs = json::parse(buffer);
-                        if (responsJs["errno"] != 0) {
-                            cerr << responsJs["errmsg"] << endl;
-                        } else { // 登录成功
-                            // 记录当前用户的id与name
-                            g_currentUser.setId(responsJs["id"]);
-                            g_currentUser.setName(responsJs["name"]);
-
-                            if (responsJs.contains("friends")) {
-                                // 如果存在好友，那么将好友列表存储
-                                vector<string> vec = responsJs["friends"];
-                                for (string& str : vec) {
-                                    json js = json::parse(str);
-                                    User user;
-                                    user.setId(js["id"].get<int>());
-                                    user.setName(js["name"]);
-                                    user.setState(js["state"]);
-                                    g_currentUserFriendList.push_back(user);
-                                }
-                            }
-
-                            if (responsJs.contains("groups")) {
-                                // 如果存在好友，那么将好友列表存储
-                                vector<string> vec1 = responsJs["groups"];
-                                for (string& str : vec1) {
-                                    json groupjs = json::parse(str);
-                                    Group group;
-                                    group.setId(groupjs["id"].get<int>());
-                                    group.setDesc(groupjs["groupdesc"]);
-                                    group.setName(groupjs["groupname"]);
-
-                                    vector<string> groupvec2 = groupjs["users"];
-                                    for (string& userstr : groupvec2) {
-                                        GroupUser user;
-                                        json userinfo = json::parse(userstr);
-                                        user.setId(userinfo["id"].get<int>());
-                                        user.setRole(userinfo["role"]);
-                                        user.setName(userinfo["name"]);
-                                        user.setState(userinfo["state"]);
-                                        group.getUsers().push_back(user);
-                                    }
-
-                                    g_currentUserGroupList.push_back(group);
-                                }
-                            }
-                            showCurrentUserData();
-                            if (responsJs.contains("offlinemsg")) {
-                                //如果有离线消息
-                                vector<string> vec = responsJs["offlinemsg"];
-                                for (string& str : vec) {
-                                    json js = json::parse(str);
-                                    // time + [id] + name + " said" + xxx
-                                    if (js["msgid"] == ONE_CHAT_MSG) {
-                                        cout << "私聊"
-                                             << js["time"].get<string>() << " ["
-                                             << js["id"] << "]" << js["name"]
-                                             << " said: " << js["msg"] << endl;
-                                    }
-                                    if (js["msgid"] == GROUP_CHAT_MSG) {
-                                        cout << "群消息" << js["time"]
-                                             << "group:" << js["groupid"]
-                                             << " 's member: [" << js["id"]
-                                             << "] name:" << js["name"]
-                                             << " said:" << js["msg"] << endl;
-                                    }
-                                }
-                            }
-
-                            // 启动接收线程负责接收数据，该线程只启动一次
-                            static bool threadRunning = false;
-                            if (!threadRunning) {
-                                std::thread readTask(readTaskHandler, clientfd);
-                                readTask.detach();
-                                threadRunning = true;
-                            }
-
-                            // 进入聊天主菜单页面
-                            isMainMenuRunning = true;
-                            mainMenu(clientfd);
-                        }
+                    // 进入聊天主菜单页面
+                    sem_wait(&rwsem);
+                    if (g_isLoginSuccess) {
+                        isMainMenuRunning = true;
+                        mainMenu(clientfd);
                     }
                 }
             } break;
@@ -205,6 +138,8 @@ int main(int argc, char** argv)
                 cout << "password:";
                 cin.getline(password, 50);
 
+                g_isLoginSuccess = false;
+
                 json js;
                 js["msgid"] = REG_MSG;
                 js["name"] = name;
@@ -216,27 +151,14 @@ int main(int argc, char** argv)
 
                 if (len == -1) {
                     cerr << "send reg msg error:" << request << endl;
-                    exit(-1);
-                } else { //发送成功
-                    char buffer[1024] = {0};
-                    len = recv(clientfd, buffer, 1024, 0);
-                    if (len == -1) {
-                        cerr << "recv reg response fail" << endl;
-                    } else {
-                        json responsejs = json::parse(buffer);
-                        if (responsejs["errno"].get<int>() != 0) { // 注册失败
-                            cerr << name << " is already exist, register error!"
-                                 << endl;
-                        } else { // 注册成功
-                            cout << name << " register success ,userid is:"
-                                 << responsejs["id"] << ", don't forget it!"
-                                 << endl;
-                        }
-                    }
                 }
+
+                sem_wait(
+                    &rwsem); // 等待信号量，由子线程处理完注册的响应消息后通知这里
             } break;
             case 3:
                 close(clientfd);
+                sem_destroy(&rwsem);
                 exit(0);
             default:
                 cerr << "invalid input!" << endl;
@@ -277,6 +199,87 @@ void showCurrentUserData()
     }
 }
 
+void doLoginResponse(json& responsJs)
+{
+    if (responsJs["errno"] != 0) {
+        cerr << responsJs["errmsg"] << endl;
+        g_isLoginSuccess = false;
+    } else { // 登录成功
+        // 记录当前用户的id与name
+        g_currentUser.setId(responsJs["id"]);
+        g_currentUser.setName(responsJs["name"]);
+
+        if (responsJs.contains("friends")) {
+            // 如果存在好友，那么将好友列表存储
+            vector<string> vec = responsJs["friends"];
+            for (string& str : vec) {
+                json js = json::parse(str);
+                User user;
+                user.setId(js["id"].get<int>());
+                user.setName(js["name"]);
+                user.setState(js["state"]);
+                g_currentUserFriendList.push_back(user);
+            }
+        }
+
+        if (responsJs.contains("groups")) {
+            // 如果存在好友，那么将好友列表存储
+            vector<string> vec1 = responsJs["groups"];
+            for (string& str : vec1) {
+                json groupjs = json::parse(str);
+                Group group;
+                group.setId(groupjs["id"].get<int>());
+                group.setDesc(groupjs["groupdesc"]);
+                group.setName(groupjs["groupname"]);
+
+                vector<string> groupvec2 = groupjs["users"];
+                for (string& userstr : groupvec2) {
+                    GroupUser user;
+                    json userinfo = json::parse(userstr);
+                    user.setId(userinfo["id"].get<int>());
+                    user.setRole(userinfo["role"]);
+                    user.setName(userinfo["name"]);
+                    user.setState(userinfo["state"]);
+                    group.getUsers().push_back(user);
+                }
+
+                g_currentUserGroupList.push_back(group);
+            }
+        }
+        showCurrentUserData();
+        if (responsJs.contains("offlinemsg")) {
+            //如果有离线消息
+            vector<string> vec = responsJs["offlinemsg"];
+            for (string& str : vec) {
+                json js = json::parse(str);
+                // time + [id] + name + " said" + xxx
+                if (js["msgid"] == ONE_CHAT_MSG) {
+                    cout << "私聊" << js["time"].get<string>() << " ["
+                         << js["id"] << "]" << js["name"]
+                         << " said: " << js["msg"] << endl;
+                }
+                if (js["msgid"] == GROUP_CHAT_MSG) {
+                    cout << "群消息" << js["time"] << "group:" << js["groupid"]
+                         << " 's member: [" << js["id"]
+                         << "] name:" << js["name"] << " said:" << js["msg"]
+                         << endl;
+                }
+            }
+        }
+        g_isLoginSuccess = true;
+    }
+}
+
+void doRegResponse(json& responsejs)
+{
+    if (responsejs["errno"].get<int>() != 0) { // 注册失败
+        cerr << "name is already exist, register error!" << endl;
+    } else { // 注册成功
+        cout << "name register success ,userid is:" << responsejs["id"]
+             << ", don't forget it!" << endl;
+    }
+}
+
 void readTaskHandler(int clientfd)
 {
     while (true) {
@@ -301,6 +304,17 @@ void readTaskHandler(int clientfd)
         }
         if (js["msgid"] == CREATE_GROUP_ACK) {
             cout << js["msg"] << endl;
+            continue;
+        }
+        if (js["msgid"] == LOGIN_MSG_ACK) {
+            doLoginResponse(js);
+            sem_post(&rwsem); // 通知主线程处理结果处理完成
+            continue;
+        }
+        if (js["msgid"] == REG_MSG_ACK) {
+            doRegResponse(js);
+            sem_post(&rwsem); // 通知主线程处理注册结果处理完成
+            continue;
         }
     }
 }
