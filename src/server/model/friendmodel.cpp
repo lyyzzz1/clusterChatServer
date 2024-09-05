@@ -18,8 +18,12 @@ void FriendModel::insert(int userid, int friendid)
 vector<User> FriendModel::query(int userid)
 {
     char sql[1024];
-    // select a.id,a.name,a.state from User a join friend b on b.friendid = a.id where b.userid = %d
-    sprintf(sql, "select a.id,a.name,a.state from User a join friend b on b.friendid = a.id where b.userid = %d", userid);
+    // select a.id,a.name,a.state from User a join friend b on b.friendid = a.id
+    // where b.userid = %d
+    sprintf(sql,
+            "select a.id,a.name,a.state from User a join friend b on "
+            "b.friendid = a.id where b.userid = %d",
+            userid);
     vector<User> vec;
     MySQL mysql;
     if (mysql.connect()) {

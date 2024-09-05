@@ -1,10 +1,11 @@
 #ifndef DB_H
 #define DB_H
 
-#include <cstddef>
+#include "sqlConnectionPool.h"
+#include <muduo/base/Logging.h>
+#include <mutex>
 #include <mysql/mysql.h>
 #include <string>
-#include <muduo/base/Logging.h>
 
 using namespace std;
 
@@ -16,6 +17,7 @@ public:
     bool update(string sql);
     MYSQL_RES* query(string sql);
     MYSQL* getConneciton();
+
 private:
     MYSQL* _conn;
 };

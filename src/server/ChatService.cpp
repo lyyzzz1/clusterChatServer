@@ -8,8 +8,6 @@
 #include "user.hpp"
 #include "usermodel.hpp"
 #include <functional>
-#include <iostream>
-#include <map>
 #include <mutex>
 #include <string>
 #include <utility>

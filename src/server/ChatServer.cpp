@@ -1,8 +1,7 @@
 #include "ChatServer.hpp"
-#include <functional>
-#include <string>
-#include "json.hpp"
 #include "ChatService.hpp"
+#include "json.hpp"
+#include <functional>
 #include <iostream>
 using namespace std;
 using json = nlohmann::json;
@@ -21,24 +20,27 @@ ChatServer::ChatServer(EventLoop* loop, const InetAddress& listenAddr,
 
 void ChatServer::start() { _server.start(); }
 
-void ChatServer::onConnection(const TcpConnectionPtr& conn) {
+void ChatServer::onConnection(const TcpConnectionPtr& conn)
+{
     // 客户端断开连接释放资源
-    if(!conn->connected())
-    {
+    if (!conn->connected()) {
         ChatService::instance()->clientCloseException(conn);
         conn->shutdown();
     }
 }
 
 // 注册读写事件相关信息的回调函数
-void ChatServer::onMessage(const TcpConnectionPtr& conn, Buffer* buffer, Timestamp time) {
+void ChatServer::onMessage(const TcpConnectionPtr& conn, Buffer* buffer,
+                           Timestamp time)
+{
     string buf = buffer->retrieveAllAsString();
     std::cout << buf << std::endl;
     // 数据的反序列化
     json js = json::parse(buf);
     // 解耦网络模块的代码和业务模块的代码
     // 通过js["msgid"] 获取=>业务handler
-    auto msgHandler = ChatService::instance()->getHandler(js["msgid"].get<int>());
+    auto msgHandler =
+        ChatService::instance()->getHandler(js["msgid"].get<int>());
     // 回调消息绑定好的事件处理器，来执行相应的业务处理
-    msgHandler(conn,js,time);
+    msgHandler(conn, js, time);
 }

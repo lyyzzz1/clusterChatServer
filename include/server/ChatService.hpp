@@ -4,7 +4,6 @@
 #include "json.hpp"
 #include "usermodel.hpp"
 #include <functional>
-#include <map>
 #include <muduo/base/Timestamp.h>
 #include <muduo/net/Callbacks.h>
 #include <muduo/net/TcpConnection.h>
